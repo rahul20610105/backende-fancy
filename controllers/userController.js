@@ -1,104 +1,118 @@
-import User from "../models/userModel.js";
-import validator from "validator";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
+import express from 'express';
+import User from '../models/userModel.js'; // Import your User model
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 
-// Function to create a JWT token
-const createToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token will expire in 1 hour
+// User Registration
+export const register = async (req, res) => {
+    try {
+        const { name, username, email, password, confirmPassword } = req.body;
+
+        // Validate input fields
+        if (!name || !username || !email || !password || !confirmPassword) {
+            return res.status(400).json({ message: "All fields are required" });
+        }
+        if (password !== confirmPassword) {
+            return res.status(400).json({ message: "Passwords do not match" });
+        }
+
+        // Check if username or email already exists
+        const userExists = await User.findOne({ $or: [{ username }, { email }] });
+        if (userExists) {
+            return res.status(400).json({ message: "Username or email already exists, try a different one" });
+        }
+
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create user
+        await User.create({
+            name,
+            username,
+            email,
+            password: hashedPassword,
+            cartData: {}, // Initial empty cart
+            isAdmin: false // Default to false for new users
+        });
+
+        return res.status(201).json({
+            message: "Account created successfully.",
+            success: true
+        });
+    } catch (error) {
+        console.error("Registration error:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
 };
 
-// Route for user login
-const loginUser = async (req, res) => {
+// User Login
+export const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { username, password } = req.body;
 
-        const user = await User.findOne({ email });
+        // Validate input fields
+        if (!username || !password) {
+            return res.status(400).json({ message: "All fields are required" });
+        }
+
+        // Find the user by username
+        const user = await User.findOne({ username });
         if (!user) {
-            return res.json({ success: false, message: "Invalid email" });
+            return res.status(400).json({
+                message: "Incorrect username or password",
+                success: false
+            });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (isMatch) {
-            const token = createToken(user._id);
-            // Set token in the response headers (optional)
-            res.setHeader("Authorization", `Bearer ${token}`);
-            return res.json({ success: true, token });
-        } else {
-            return res.json({ success: false, message: "Invalid password" });
+        // Check password validity
+        const isPasswordMatch = await bcrypt.compare(password, user.password);
+        if (!isPasswordMatch) {
+            return res.status(400).json({
+                message: "Incorrect username or password",
+                success: false
+            });
         }
+
+        // Create JWT token payload
+        const tokenData = {
+            userId: user._id,
+            isAdmin: user.isAdmin // Include admin status
+        };
+
+        // Generate JWT token
+        const token = await jwt.sign(tokenData, process.env.JWT_SECRET_KEY, { expiresIn: '1d' });
+
+        // Set the cookie with appropriate options
+        res.cookie("token", token, {
+            maxAge: 1 * 24 * 60 * 60 * 1000, // 1 day
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'None',
+        });
+
+        // Send success response with user details and the token
+        return res.status(200).json({
+            _id: user._id,
+            username: user.username,
+            name: user.name,
+            isAdmin: user.isAdmin,
+            token // Include the token in the response
+        });
+
     } catch (error) {
-        console.error("Error in loginUser:", error);
-        return res.json({ success: false, message: "Error occurred. Try again." });
+        console.error("Login error:", error);
+        return res.status(500).json({ message: "Internal server error" });
     }
 };
 
-// Route for user registration
-const registerUser = async (req, res) => {
+// User Logout
+export const logout = (req, res) => {
     try {
-        const { username, email, password, name, isAdmin, adminKey } = req.body;
-
-        // Check if the email already exists
-        const exists = await User.findOne({ email });
-        if (exists) {
-            return res.json({ success: false, message: "User already exists." });
-        }
-
-        // Validate email format and strong password
-        if (!validator.isEmail(email)) {
-            return res.json({ success: false, message: "Please enter a valid email." });
-        }
-        if (!validator.isStrongPassword(password)) {
-            return res.json({ success: false, message: "Please enter a strong password." });
-        }
-
-        // Verify admin key if registering as an admin
-        if (isAdmin && adminKey !== process.env.ADMIN_KEY) {
-            console.log("Provided admin key:", adminKey); // Debugging
-            console.log("Expected admin key:", process.env.ADMIN_KEY); // Debugging
-            return res.status(403).json({ success: false, message: "Invalid admin key." });
-        }
-
-        // Hash the user password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const newUser = new User({ username, email, password: hashedPassword, name, isAdmin });
-        const user = await newUser.save();
-        const token = createToken(user._id);
-
-        return res.json({ success: true, token });
+        return res.status(200).cookie("token", "", { maxAge: 0 }).json({
+            message: "Logged out successfully."
+        });
     } catch (error) {
-        console.error("Error in registerUser:", error);
-        return res.json({ success: false, message: "Error occurred. Please try again." });
+        console.error("Logout error:", error);
+        return res.status(500).json({ message: "Internal server error" });
     }
 };
-
-// Route for admin login 
-const adminLogin = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.json({ success: false, message: "Invalid email" });
-        }
-
-        if (!user.isAdmin) {
-            return res.json({ success: false, message: "Access denied. Admin only." });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (isMatch) {
-            const token = createToken(user._id);
-            return res.json({ success: true, token });
-        } else {
-            return res.json({ success: false, message: "Invalid password" });
-        }
-    } catch (error) {
-        console.error("Error in adminLogin:", error);
-        return res.json({ success: false, message: "Error occurred. Try again." });
-    }
-};
-
-export { loginUser, registerUser, adminLogin };

@@ -1,17 +1,19 @@
 import express from "express";
-import { loginUser, registerUser, adminLogin } from "../controllers/userController.js";
-import verifyToken from "../middleware/authMiddleware.js"; // Ensure this is the correct path
-import adminRoute from "../middleware/adminMiddleware.js"; // Ensure this is the correct path
+import { 
+    login, 
+    logout, 
+    register
+} from "../controllers/userController.js";
+import isAuthenticated from "../middleware/isAuthenticated.js";
+const router = express.Router();
 
-const userRoutes = express.Router();
+// User registration
+router.route("/register").post(register);
 
-// Route for user registration
-userRoutes.post("/register", registerUser);
+// User login
+router.route("/login").post(login);
 
-// Route for user login
-userRoutes.post("/login", loginUser);
+// User logout
+router.route("/logout").get(isAuthenticated, logout);
 
-// Route for admin login (use admin authentication if needed)
-userRoutes.post("/admin", verifyToken, adminRoute, adminLogin);
-
-export default userRoutes;
+export default router;
