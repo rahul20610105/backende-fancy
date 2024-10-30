@@ -1,41 +1,36 @@
 import User from "../models/userModel.js";
 import validator from "validator";
-import bcrypt from "bcrypt"
-import jwt from "jsonwebtoken"
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
+// Function to create a JWT token
+const createToken = (id) => {
+    return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token will expire in 1 hour
+};
 
+// Route for user login
+const loginUser = async (req, res) => {
+    try {
+        const { email, password } = req.body;
 
-const createToken=(id)=>{
-    return jwt.sign({id},process.env.JWT_SECRET)
-}
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.json({ success: false, message: "Invalid email" });
+        }
 
-//route for user login
-const loginUser=async(req,res)=>{
-try{
-const{email,password}=req.body;
-
-const user=await User.findOne({email});
-if (!user){
-   return res.json({success:false,message:"invalid email"})
-}
-
-const isMatch= await bcrypt.compare(password,user.password)
-
-if (isMatch){
-    const token=createToken(user._id)
-    res.json({success:true,token})
-}else{
-    return res.json({success:false,message:"invalid password"})
-}
-
-
-} catch(error){
-console.log(error)
-res.json({success:false,message:"error occured. try again "})
-}
-
-
-
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (isMatch) {
+            const token = createToken(user._id);
+            // Set token in the response headers (optional)
+            res.setHeader("Authorization", `Bearer ${token}`);
+            return res.json({ success: true, token });
+        } else {
+            return res.json({ success: false, message: "Invalid password" });
+        }
+    } catch (error) {
+        console.error("Error in loginUser:", error);
+        return res.json({ success: false, message: "Error occurred. Try again." });
+    }
 };
 
 // Route for user registration
@@ -59,11 +54,10 @@ const registerUser = async (req, res) => {
 
         // Verify admin key if registering as an admin
         if (isAdmin && adminKey !== process.env.ADMIN_KEY) {
-            console.log("Provided admin key:", adminKey);  // To debug the input value
-            console.log("Expected admin key:", process.env.ADMIN_KEY);  // To debug the env value
+            console.log("Provided admin key:", adminKey); // Debugging
+            console.log("Expected admin key:", process.env.ADMIN_KEY); // Debugging
             return res.status(403).json({ success: false, message: "Invalid admin key." });
         }
-        
 
         // Hash the user password
         const salt = await bcrypt.genSalt(10);
@@ -73,21 +67,19 @@ const registerUser = async (req, res) => {
         const user = await newUser.save();
         const token = createToken(user._id);
 
-        res.json({ success: true, token });
+        return res.json({ success: true, token });
     } catch (error) {
         console.error("Error in registerUser:", error);
-        res.json({ success: false, message: "Error occurred. Please try again." });
+        return res.json({ success: false, message: "Error occurred. Please try again." });
     }
 };
 
-
-
-//route for admn login 
+// Route for admin login 
 const adminLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const user = await User.findOne({ email });
 
+        const user = await User.findOne({ email });
         if (!user) {
             return res.json({ success: false, message: "Invalid email" });
         }
@@ -97,18 +89,16 @@ const adminLogin = async (req, res) => {
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
-
         if (isMatch) {
             const token = createToken(user._id);
-            res.json({ success: true, token });
+            return res.json({ success: true, token });
         } else {
             return res.json({ success: false, message: "Invalid password" });
         }
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: "Error occurred. Try again" });
+        console.error("Error in adminLogin:", error);
+        return res.json({ success: false, message: "Error occurred. Try again." });
     }
 };
 
-
-export {loginUser,registerUser,adminLogin}
+export { loginUser, registerUser, adminLogin };
