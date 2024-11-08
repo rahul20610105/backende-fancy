@@ -29,10 +29,21 @@ connectCloudinary();
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:5173', // Allow requests from Vite's localhost
-  origin:'https://efancy.vercel.app/',
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'https://efancy.vercel.app',
+      'https://fancynepali.vercel.app'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true); // Allow the request
+    } else {
+      callback(new Error('Not allowed by CORS')); // Deny the request
+    }
+  },
   credentials: true, // Allow credentials (like cookies) to be sent
 }));
+
 app.use(express.json());
 
 // API endpoints
