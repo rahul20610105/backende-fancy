@@ -30,6 +30,7 @@ connectCloudinary();
 // Middleware
 app.use(cors({
   origin: 'http://localhost:5173', // Allow requests from Vite's localhost
+  origin:'https://efancy.vercel.app/',
   credentials: true, // Allow credentials (like cookies) to be sent
 }));
 app.use(express.json());
